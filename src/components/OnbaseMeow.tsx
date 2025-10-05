@@ -541,8 +541,10 @@ export default function OnbaseMeow() {
           <div>Unable to load marketplace item.</div>
           <div className="text-xs">
             <div>Contract: {marketplaceAddress}</div>
-            <div>Chain ID: {marketplaceChainId}</div>
+            <div>Expected Chain: {marketplaceChainId} (Base Sepolia)</div>
             <div>Your Chain: {activeChainId || 'Not connected'}</div>
+            <div>Connected: {isConnected ? 'Yes' : 'No'}</div>
+            <div>RPC URL: {process.env.NEXT_PUBLIC_MARKETPLACE_RPC_URL}</div>
           </div>
           {marketplaceError && (
             <div className="mt-2 text-xs text-destructive">
@@ -552,6 +554,35 @@ export default function OnbaseMeow() {
           <div className="text-xs text-yellow-600">
             💡 Make sure you deployed the contract to chain ID {marketplaceChainId} and your wallet is connected to the same chain.
           </div>
+          {isConnected && activeChainId !== marketplaceChainId && (
+            <button 
+              onClick={async () => {
+                try {
+                  await (window as any).ethereum?.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: `0x${marketplaceChainId.toString(16)}` }],
+                  });
+                } catch (error: any) {
+                  if (error.code === 4902) {
+                    // Network not added, add it
+                    await (window as any).ethereum?.request({
+                      method: 'wallet_addEthereumChain',
+                      params: [{
+                        chainId: `0x${marketplaceChainId.toString(16)}`,
+                        chainName: 'Base Sepolia',
+                        rpcUrls: ['https://sepolia.base.org'],
+                        nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                        blockExplorerUrls: ['https://sepolia.basescan.org']
+                      }]
+                    });
+                  }
+                }
+              }}
+              className="px-3 py-1 bg-primary text-primary-foreground rounded text-xs hover:opacity-80"
+            >
+              Switch to Base Sepolia (Chain {marketplaceChainId})
+            </button>
+          )}
         </div>
       );
     }

@@ -22,11 +22,12 @@ export async function POST(request: NextRequest) {
     })
 
     // Get or create user - try by FID first, then create if needed
-    let user = await CatService.getUserByFid(parseInt(userFid))
+    const safeFid = Math.abs(parseInt(userFid)) % 2147483647 // Keep within 32-bit signed int range
+    let user = await CatService.getUserByFid(safeFid)
     if (!user) {
       // Create user if they don't exist
       user = await CatService.createOrUpdateUser({
-        fid: parseInt(userFid),
+        fid: safeFid,
         username: `user_${userFid}`,
         pfpUrl: undefined,
       })
