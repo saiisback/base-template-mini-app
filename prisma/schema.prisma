@@ -84,3 +84,14 @@ model CatStats {
 
   @@map("cat_stats")
 }
+
+model LogEntry {
+  id        String   @id @default(cuid())
+  fid       Int?
+  level     String
+  message   String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@map("log_entries")
+}

@@ -7,7 +7,7 @@ import { baseSepolia } from "wagmi/chains";
 import Image from "next/image";
 import { ShareButton } from "./ui/Share";
 import { Button } from "./ui/Button";
-// import { config } from "~/components/providers/WagmiProvider";
+import { fetchWithAuth } from "~/lib/auth";
 
 type GameState = 
   | "welcome" 
@@ -56,37 +56,64 @@ export default function OnbaseMeow() {
   const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  const addActivityLog = useCallback(async (action: 'feed' | 'cuddle' | 'love', user: 'you' | 'partner') => {
-    const newActivity: ActivityLog = {
-      id: Date.now().toString(),
-      action,
-      user,
-      timestamp: new Date()
-    };
-    setActivityLog(prev => [newActivity, ...prev.slice(0, 4)]); // Keep only last 5 activities
+  const fetchActivityFeed = useCallback(async (sessionId: string) => {
+    if (!context?.user?.fid) return;
 
+    try {
+      const response = await fetchWithAuth(`/api/activity?sessionId=${sessionId}&limit=5`, {
+        headers: {
+          Authorization: `Bearer ${context.user.fid}`,
+        },
+      });
+      if (!response.ok) {
+        console.error('Failed to fetch activity feed: HTTP', response.status);
+        return;
+      }
+      const data = await response.json();
+
+      if (Array.isArray(data.activities)) {
+        const formatted = data.activities.map((activity: any) => ({
+          id: activity.id,
+          action: activity.action,
+          user: activity.user?.fid === context.user?.fid ? 'you' : 'partner',
+          timestamp: new Date(activity.createdAt)
+        }));
+        setActivityLog(formatted);
+      }
+    } catch (error) {
+      console.error('Failed to fetch activity feed:', error);
+    }
+  }, [context?.user?.fid]);
+
+  const addActivityLog = useCallback(async (action: 'feed' | 'cuddle' | 'love', user: 'you' | 'partner') => {
     // Log to database if we have a session
     if (gameState === "cat-care" && context?.user?.fid && currentSessionId) {
       console.log('Logging activity to database...', { action, fid: context.user.fid, sessionId: currentSessionId });
       try {
-        const response = await fetch('/api/activity', {
+        const response = await fetchWithAuth('/api/activity', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${context.user.fid}` // Add auth header
+          headers: {
+            Authorization: `Bearer ${context.user.fid}`,
           },
           body: JSON.stringify({
             sessionId: currentSessionId,
             action
           })
         });
+        if (!response.ok) {
+          console.error('Failed to log activity: HTTP', response.status);
+          return;
+        }
         const data = await response.json();
         console.log('Activity logged successfully:', data);
+        if (data.activity) {
+          await fetchActivityFeed(currentSessionId);
+        }
       } catch (error) {
         console.error('Failed to log activity to database:', error);
       }
     }
-  }, [gameState, context?.user?.fid, currentSessionId]);
+  }, [gameState, context?.user?.fid, currentSessionId, fetchActivityFeed]);
 
   // Simulate partner activities occasionally
   useEffect(() => {
@@ -133,11 +160,10 @@ export default function OnbaseMeow() {
       // Log wallet connection to database
       if (address && context?.user?.fid) {
         console.log('Logging wallet connection to database...', { address, fid: context.user.fid });
-        fetch('/api/wallet-connection', {
+        fetchWithAuth('/api/wallet-connection', {
           method: 'POST',
           headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${context.user.fid}` // Add auth header
+            Authorization: `Bearer ${context.user.fid}`,
           },
           body: JSON.stringify({
             address,
@@ -226,46 +252,39 @@ export default function OnbaseMeow() {
     if (context?.user?.fid) {
       console.log('Creating cat session in database...', { fid: context.user.fid });
       try {
-        const response = await fetch('/api/cat-session', {
+        const response = await fetchWithAuth('/api/cat-session', {
           method: 'POST',
           headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${context.user.fid}` // Add auth header
+            Authorization: `Bearer ${context.user.fid}`,
           },
           body: JSON.stringify({
             partnerFid: 12345,
             name: 'cattyyy'
           })
         });
+        if (!response.ok) {
+          console.error('Failed to create cat session: HTTP', response.status);
+          return;
+        }
         const data = await response.json();
         console.log('Cat session created:', data);
         if (data.session?.id) {
           setCurrentSessionId(data.session.id);
+          await fetchActivityFeed(data.session.id);
         }
       } catch (error) {
         console.error('Failed to create cat session:', error);
       }
     }
     
-    // Add some initial partner activities
-    const initialActivities: ActivityLog[] = [
-      {
-        id: "1",
-        action: "feed",
-        user: "partner",
-        timestamp: new Date(Date.now() - 30000) // 30 seconds ago
-      },
-      {
-        id: "2", 
-        action: "love",
-        user: "partner",
-        timestamp: new Date(Date.now() - 60000) // 1 minute ago
-      }
-    ];
-    setActivityLog(initialActivities);
-    
     setGameState("cat-care");
-  }, [context?.user?.fid]);
+  }, [context?.user?.fid, fetchActivityFeed]);
+
+  useEffect(() => {
+    if (currentSessionId && context?.user?.fid) {
+      fetchActivityFeed(currentSessionId);
+    }
+  }, [currentSessionId, context?.user?.fid, fetchActivityFeed]);
 
   const handleFeed = useCallback(() => {
     setShowFeedAnimation(true);

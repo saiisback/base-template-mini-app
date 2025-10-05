@@ -49,22 +49,38 @@ export async function getUserInfo(fid: number) {
 }
 
 // Helper function to make authenticated requests
-export async function fetchWithAuth(url: string, options?: RequestInit) {
+export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     try {
         // Ensure SDK is initialized
         if (!sdk.quickAuth) {
             throw new Error('QuickAuth SDK not initialized');
         }
 
-        // If options include a body, ensure Content-Type is set
-        if (options?.body && !options.headers) {
-            options.headers = {
-                'Content-Type': 'application/json',
-            };
-        }
+        const resolvedUrl = url.startsWith('http')
+            ? url
+            : (() => {
+                const base =
+                  typeof window !== 'undefined'
+                    ? window.location.origin
+                    : process.env.NEXT_PUBLIC_URL;
 
-        // Make the request
-        const response = await sdk.quickAuth.fetch(url, options);
+                if (!base) {
+                    throw new Error('Base URL is not configured for authenticated fetches');
+                }
+
+                return `${base.replace(/\/$/, '')}${url}`;
+            })();
+
+        const headers = new Headers(options.headers);
+        if (options.method && options.method !== 'GET') {
+            headers.set('Content-Type', 'application/json');
+        }
+        headers.set('Accept', 'application/json');
+
+        const response = await sdk.quickAuth.fetch(resolvedUrl, {
+            ...options,
+            headers,
+        });
 
         // Handle non-OK responses
         if (!response.ok) {

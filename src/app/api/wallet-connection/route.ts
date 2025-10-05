@@ -12,6 +12,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { address, chainId, connector } = body
 
+    await CatService.createLogEntry({
+      fid,
+      level: 'info',
+      message: 'Wallet connection request received',
+      meta: { address, chainId, connector },
+    })
+
     if (!address || !chainId || !connector) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
@@ -46,12 +53,24 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    await CatService.createLogEntry({
+      fid,
+      level: 'info',
+      message: 'Wallet connection logged',
+      meta: { connectionId: connection.id },
+    })
+
     return NextResponse.json({ 
       connection,
       message: 'Wallet connection logged successfully'
     })
   } catch (error) {
     console.error('Error logging wallet connection:', error)
+    await CatService.createLogEntry({
+      level: 'error',
+      message: 'Error logging wallet connection',
+      meta: { error: String(error) },
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

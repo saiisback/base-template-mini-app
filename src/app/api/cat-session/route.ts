@@ -12,6 +12,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { partnerFid, name } = body
 
+    await CatService.createLogEntry({
+      fid,
+      level: 'info',
+      message: 'Create cat session request received',
+      meta: { partnerFid, name },
+    })
+
     // Get or create user
     let user = await CatService.getUserByFid(fid)
     if (!user) {
@@ -44,9 +51,21 @@ export async function POST(request: NextRequest) {
       name,
     })
 
+    await CatService.createLogEntry({
+      fid,
+      level: 'info',
+      message: 'Cat session created',
+      meta: { sessionId: session?.id },
+    })
+
     return NextResponse.json({ session })
   } catch (error) {
     console.error('Error creating cat session:', error)
+    await CatService.createLogEntry({
+      level: 'error',
+      message: 'Error creating cat session',
+      meta: { error: String(error) },
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

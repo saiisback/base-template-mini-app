@@ -12,6 +12,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { sessionId, action } = body
 
+    await CatService.createLogEntry({
+      fid,
+      level: 'info',
+      message: 'Activity log request received',
+      meta: { sessionId, action },
+    })
+
     if (!sessionId || !action) {
       return NextResponse.json({ error: 'Missing sessionId or action' }, { status: 400 })
     }
@@ -41,6 +48,13 @@ export async function POST(request: NextRequest) {
     // Get updated cat stats
     const stats = await CatService.getCatStats(sessionId)
 
+    await CatService.createLogEntry({
+      fid,
+      level: 'info',
+      message: 'Activity logged',
+      meta: { activityId: activity.id, sessionId },
+    })
+
     return NextResponse.json({ 
       activity,
       stats,
@@ -48,6 +62,11 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error logging activity:', error)
+    await CatService.createLogEntry({
+      level: 'error',
+      message: 'Error logging activity',
+      meta: { error: String(error) },
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -71,6 +90,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ activities })
   } catch (error) {
     console.error('Error fetching activities:', error)
+    await CatService.createLogEntry({
+      level: 'error',
+      message: 'Error fetching activities',
+      meta: { error: String(error) },
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

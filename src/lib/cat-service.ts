@@ -1,4 +1,5 @@
 import { db } from './db'
+import { Prisma } from '@prisma/client'
 
 export interface CreateUserData {
   fid: number
@@ -24,6 +25,13 @@ export interface UpdateCatStatsData {
   love?: number
   hunger?: number
   happiness?: number
+}
+
+export interface LogEntryData {
+  fid?: number
+  level: 'info' | 'warn' | 'error'
+  message: string
+  meta?: unknown
 }
 
 export class CatService {
@@ -65,6 +73,9 @@ export class CatService {
         partnerId: data.partnerId,
         name: data.name || 'cattyyy',
       },
+      include: {
+        catStats: true,
+      },
     })
 
     // Create initial cat stats
@@ -77,7 +88,7 @@ export class CatService {
       },
     })
 
-    return session
+    return await this.getCatSession(session.id)
   }
 
   static async getCatSession(sessionId: string) {
@@ -95,6 +106,7 @@ export class CatService {
           },
           take: 10,
         },
+        catStats: true,
       },
     })
   }
@@ -119,6 +131,10 @@ export class CatService {
           },
           take: 5,
         },
+        catStats: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     })
   }
@@ -200,11 +216,13 @@ export class CatService {
 
     const updateData = updates[action as keyof typeof updates]
     if (updateData) {
-      await this.updateCatStats({
+      return await this.updateCatStats({
         sessionId,
         ...updateData,
       })
     }
+
+    return currentStats
   }
 
   // Wallet connection tracking
@@ -235,6 +253,17 @@ export class CatService {
       where: { address },
       include: {
         user: true,
+      },
+    })
+  }
+
+  static async createLogEntry(data: LogEntryData) {
+    return await db.logEntry.create({
+      data: {
+        fid: data.fid,
+        level: data.level,
+        message: data.message,
+        meta: data.meta as any,
       },
     })
   }
