@@ -60,7 +60,6 @@ export default function OnbaseMeow() {
   const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  const fetchActivityFeed = useCallback(async (sessionId: string) => {
   const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS;
 
   const {
@@ -136,87 +135,7 @@ export default function OnbaseMeow() {
 
   const formatPrice = (value: bigint) => `${formatUnits(value, 18)} ETH`;
 
-  const renderMarketplace = () => {
-    if (!marketplaceAddress) {
-      return (
-        <div className="text-sm text-muted-foreground">
-          Marketplace contract not configured. Ask the parent app owner to set
-          <code className="ml-1 font-mono">NEXT_PUBLIC_MARKETPLACE_ADDRESS</code>.
-        </div>
-      );
-    }
-
-    if (isLoadingMarketplaceItem) {
-      return <div className="text-sm">Loading marketplace item...</div>;
-    }
-
-    if (!marketplaceItem) {
-      return <div className="text-sm text-muted-foreground">Unable to load marketplace item.</div>;
-    }
-
-    const [id, name, metadataURI, price, seller, available] = marketplaceItem as unknown as [
-      bigint,
-      string,
-      string,
-      bigint,
-      string,
-      boolean
-    ];
-
-    const isOwner = seller && address && seller.toLowerCase() === address.toLowerCase();
-    const isDisabled = !available || isPurchasePending || isPurchaseConfirming || !!purchaseHash || isOwner;
-
-    return (
-      <div className="bg-card border-4 border-primary rounded-3xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg text-primary">{name}</h3>
-          <span className="text-xs text-muted-foreground">Seller {truncateAddress(seller)}</span>
-        </div>
-
-        <div className="w-full h-48 bg-secondary border-2 border-primary rounded-lg flex items-center justify-center">
-          <Image
-            src="/CatPackPaid/CatItems/CatToys/CatToy.gif"
-            alt={name}
-            width={160}
-            height={160}
-            className="object-contain"
-          />
-        </div>
-
-        <div className="text-sm text-muted-foreground">
-          Metadata URI: {metadataURI || "n/a"}
-        </div>
-
-        <div className="text-xl text-primary">{formatPrice(price)}</div>
-
-        <Button
-          onClick={handlePurchaseItem}
-          disabled={isDisabled}
-          className="w-full bg-primary text-primary-foreground border-2 border-primary"
-        >
-          {isOwner
-            ? "You own this"
-            : available
-              ? isPurchasePending || isPurchaseConfirming
-                ? "Processing..."
-                : "Purchase"
-              : "Sold"}
-        </Button>
-
-        {purchaseError && (
-          <div className="text-xs text-destructive">
-            {purchaseError.message}
-          </div>
-        )}
-
-        {purchaseHash && (
-          <div className="text-xs text-muted-foreground">
-            Tx: {truncateAddress(purchaseHash)}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const fetchActivityFeed = useCallback(async (sessionId: string) => {
     if (!context?.user?.fid) return;
 
     try {
@@ -504,7 +423,15 @@ export default function OnbaseMeow() {
     </div>
   );
 
-  const MarketplaceItem = ({ name, icon, price }: { name: string; icon: string; price: number }) => (
+  const MarketplaceItem = ({
+    name,
+    icon,
+    price,
+  }: {
+    name: string;
+    icon: string;
+    price: number;
+  }) => (
     <div className="bg-card border-2 border-primary rounded-lg p-3 text-center cursor-pointer hover:bg-accent transition-colors">
       <div className="text-2xl mb-2">{icon}</div>
       <div className="text-xs mb-1">{name}</div>
