@@ -312,7 +312,7 @@ export class CatService {
       data: {
         level: data.level,
         message: data.message,
-        context: (data.context || data.meta) as Record<string, unknown>,
+        context: (data.context || data.meta) as any,
       },
     })
   }
