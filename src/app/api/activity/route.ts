@@ -20,10 +20,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
 
-    // Get user
-    const user = await CatService.getUserByFid(fid)
+    // Get or create user
+    let user = await CatService.getUserByFid(fid)
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      // Create user if they don't exist
+      user = await CatService.createOrUpdateUser({
+        fid,
+        username: `user_${fid}`,
+        pfpUrl: undefined,
+      })
     }
 
     // Log activity

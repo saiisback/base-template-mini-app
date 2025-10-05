@@ -4,9 +4,10 @@ import { useState, useCallback, useEffect } from "react";
 import { useMiniApp } from "@neynar/react";
 import { useAccount, useConnect, useSignMessage } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
+import Image from "next/image";
 import { ShareButton } from "./ui/Share";
 import { Button } from "./ui/Button";
-import { config } from "~/components/providers/WagmiProvider";
+// import { config } from "~/components/providers/WagmiProvider";
 
 type GameState = 
   | "welcome" 
@@ -36,7 +37,7 @@ interface ActivityLog {
 }
 
 export default function OnbaseMeow() {
-  const { isSDKLoaded, context, actions } = useMiniApp();
+  const { isSDKLoaded, context } = useMiniApp();
   const { address, isConnected } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { signMessage, isPending: isSignPending, data: signature, error: signError } = useSignMessage();
@@ -48,11 +49,12 @@ export default function OnbaseMeow() {
     hunger: 30,
     happiness: 75
   });
-  const [selectedCat, setSelectedCat] = useState("3Aug2025Update.png");
+  const [selectedCat] = useState("3Aug2025Update.png");
   const [showLoveAnimation, setShowLoveAnimation] = useState(false);
   const [showFeedAnimation, setShowFeedAnimation] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   const addActivityLog = useCallback(async (action: 'feed' | 'cuddle' | 'love', user: 'you' | 'partner') => {
     const newActivity: ActivityLog = {
@@ -64,16 +66,22 @@ export default function OnbaseMeow() {
     setActivityLog(prev => [newActivity, ...prev.slice(0, 4)]); // Keep only last 5 activities
 
     // Log to database if we have a session
-    if (gameState === "cat-care" && context?.user?.fid) {
+    if (gameState === "cat-care" && context?.user?.fid && currentSessionId) {
+      console.log('Logging activity to database...', { action, fid: context.user.fid, sessionId: currentSessionId });
       try {
-        await fetch('/api/activity', {
+        const response = await fetch('/api/activity', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${context.user.fid}` // Add auth header
+          },
           body: JSON.stringify({
-            sessionId: 'current-session', // In real app, this would be the actual session ID
+            sessionId: currentSessionId,
             action
           })
         });
+        const data = await response.json();
+        console.log('Activity logged successfully:', data);
       } catch (error) {
         console.error('Failed to log activity to database:', error);
       }
@@ -124,15 +132,24 @@ export default function OnbaseMeow() {
       
       // Log wallet connection to database
       if (address && context?.user?.fid) {
+        console.log('Logging wallet connection to database...', { address, fid: context.user.fid });
         fetch('/api/wallet-connection', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${context.user.fid}` // Add auth header
+          },
           body: JSON.stringify({
             address,
             chainId: 84532, // Base Sepolia testnet
             connector: 'MetaMask' // This should be dynamic based on actual connector used
           })
-        }).catch(error => {
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Wallet connection logged successfully:', data);
+        })
+        .catch(error => {
           console.error('Failed to log wallet connection:', error);
         });
       }
@@ -207,10 +224,14 @@ export default function OnbaseMeow() {
     
     // Create cat session in database
     if (context?.user?.fid) {
+      console.log('Creating cat session in database...', { fid: context.user.fid });
       try {
         const response = await fetch('/api/cat-session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${context.user.fid}` // Add auth header
+          },
           body: JSON.stringify({
             partnerFid: 12345,
             name: 'cattyyy'
@@ -218,6 +239,9 @@ export default function OnbaseMeow() {
         });
         const data = await response.json();
         console.log('Cat session created:', data);
+        if (data.session?.id) {
+          setCurrentSessionId(data.session.id);
+        }
       } catch (error) {
         console.error('Failed to create cat session:', error);
       }
@@ -324,9 +348,11 @@ export default function OnbaseMeow() {
           
           <div className="mb-8">
             <div className="w-32 h-32 mx-auto mb-4 rounded-full border-4 border-primary overflow-hidden bg-yellow-950">
-              <img 
+              <Image 
                 src="/idle.gif" 
                 alt="Cat" 
+                width={128}
+                height={128}
                 className="w-full h-full object-cover p-4"
               />
             </div>
@@ -409,9 +435,11 @@ export default function OnbaseMeow() {
 
         {/* Cat Display */}
         <div className="relative mb-6 bg-yellow-950 border-2 border-primary rounded-lg p-4 min-h-[300px] flex items-center justify-center">
-          <img 
+          <Image 
             src={`/idle.gif`}
             alt="Your Cat" 
+            width={192}
+            height={192}
             className="w-48 h-48 object-contain"
           />
           
@@ -424,9 +452,11 @@ export default function OnbaseMeow() {
           )}
           
           {showFeedAnimation && (
-            <img 
+            <Image 
               src="/eating.gif" 
               alt="Eating animation"
+              width={48}
+              height={48}
               className="absolute bottom-4 left-4 w-12 h-12"
             />
           )}
@@ -560,16 +590,20 @@ export default function OnbaseMeow() {
         </div>
 
         <div className="bg-secondary border-2 border-primary rounded-lg p-4 mb-4 min-h-[400px] relative">
-          <img 
+          <Image 
             src="/CatPackPaid/CatItems/Rooms/Room1.png"
             alt="Playground background"
+            width={400}
+            height={400}
             className="absolute inset-0 w-full h-full object-cover rounded"
           />
           
           <div className="relative z-10 flex items-center justify-center h-full">
-            <img 
+            <Image 
               src={`/CatPackPaid/Sprites/${selectedCat}`}
               alt="Playing cat" 
+              width={128}
+              height={128}
               className="w-32 h-32 object-contain animate-bounce"
             />
           </div>

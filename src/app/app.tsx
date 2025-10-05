@@ -8,8 +8,6 @@ const OnbaseMeow = dynamic(() => import("~/components/OnbaseMeow"), {
   ssr: false,
 });
 
-export default function App(
-  { title }: { title?: string } = { title: APP_NAME }
-) {
+export default function App() {
   return <OnbaseMeow />;
 }

@@ -17,9 +17,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Get or create user
-    const user = await CatService.getUserByFid(fid)
+    let user = await CatService.getUserByFid(fid)
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      // Create user if they don't exist
+      user = await CatService.createOrUpdateUser({
+        fid,
+        username: `user_${fid}`,
+        pfpUrl: undefined,
+        address,
+      })
     }
 
     // Log wallet connection

@@ -8,8 +8,17 @@ export async function verifyAuth(request: Request): Promise<number | null> {
     if (!auth?.startsWith('Bearer ')) return null;
 
     try {
+        // For development, if it's just a number (FID), use it directly
+        const token = auth.split(' ')[1];
+        const fid = Number(token);
+        if (!isNaN(fid) && fid > 0) {
+            console.log('Using FID directly for development:', fid);
+            return fid;
+        }
+
+        // Try JWT verification for production
         const payload = await quickAuth.verifyJwt({
-            token: auth.split(' ')[1],
+            token,
             domain: (new URL(process.env.NEXT_PUBLIC_URL!)).hostname
         });
 
