@@ -1,5 +1,4 @@
 import { db } from './db'
-import { Prisma } from '@prisma/client'
 
 export interface CreateUserData {
   fid: number
@@ -84,8 +83,8 @@ export class CatService {
             address: data.address,
           }
         })
-      } catch (error: any) {
-        if (error.code === 'P2002' && error.meta?.target?.includes('fid')) {
+        } catch (error: unknown) {
+        if ((error as { code?: string; meta?: { target?: string[] } }).code === 'P2002' && (error as { meta?: { target?: string[] } }).meta?.target?.includes('fid')) {
           // FID conflict, try with a different one
           finalFid = finalFid + Math.floor(Math.random() * 1000)
           attempts++
@@ -313,7 +312,7 @@ export class CatService {
       data: {
         level: data.level,
         message: data.message,
-        context: (data.context || data.meta) as any,
+        context: (data.context || data.meta) as Record<string, unknown>,
       },
     })
   }

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useMiniApp } from "@neynar/react";
 import { useAccount, useChainId, useConnect, useSignMessage } from "wagmi";
-import { base, baseSepolia } from "wagmi/chains";
+import { baseSepolia } from "wagmi/chains";
 import Image from "next/image";
 import { ShareButton } from "./ui/Share";
 import { Button } from "./ui/Button";
@@ -17,7 +17,15 @@ import {
   usePublicClient,
 } from "wagmi";
 import { formatUnits } from "viem";
-import { http } from "viem";
+
+// Type for ethereum provider
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (params: { method: string; params: unknown[] }) => Promise<void>;
+    };
+  }
+}
 
 type GameState = 
   | "welcome" 
@@ -73,10 +81,6 @@ export default function OnbaseMeow() {
   const marketplaceChainId = Number(
     process.env.NEXT_PUBLIC_MARKETPLACE_CHAIN_ID ?? baseSepolia.id
   );
-  const marketplaceRpcUrl = process.env.NEXT_PUBLIC_MARKETPLACE_RPC_URL;
-  const publicClient = usePublicClient({
-    chainId: marketplaceChainId,
-  });
 
   const connectableConnector = useMemo(() => {
     return connectors.find((connector) => connector.id !== "farcaster") ?? connectors[0];
@@ -209,7 +213,7 @@ export default function OnbaseMeow() {
       try {
         const response = await fetch('/api/activity', {
           method: 'POST',
-          headers: {
+          headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${address}`,
           },
@@ -383,12 +387,12 @@ export default function OnbaseMeow() {
       }
 
       setIsConnecting(true);
-      connect({
+      connect({ 
         connector: connectableConnector,
         chainId: marketplaceChainId,
       });
     } else {
-      signMessage({
+      signMessage({ 
         message: "Welcome to onbase Meow! Let's raise a cat together 🐱",
       });
     }
@@ -558,14 +562,14 @@ export default function OnbaseMeow() {
             <button 
               onClick={async () => {
                 try {
-                  await (window as any).ethereum?.request({
+                  await window.ethereum?.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: `0x${marketplaceChainId.toString(16)}` }],
                   });
-                } catch (error: any) {
-                  if (error.code === 4902) {
+                } catch (error: unknown) {
+                  if ((error as { code?: number }).code === 4902) {
                     // Network not added, add it
-                    await (window as any).ethereum?.request({
+                    await window.ethereum?.request({
                       method: 'wallet_addEthereumChain',
                       params: [{
                         chainId: `0x${marketplaceChainId.toString(16)}`,
@@ -673,8 +677,8 @@ export default function OnbaseMeow() {
             ))}
           </div>
         )}
-      </div>
-    );
+    </div>
+  );
   };
 
   if (gameState === "marketplace" && !!marketplaceAddress && !marketplaceItem && marketplaceError) {
