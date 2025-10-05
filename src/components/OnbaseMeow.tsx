@@ -8,6 +8,10 @@ import Image from "next/image";
 import { ShareButton } from "./ui/Share";
 import { Button } from "./ui/Button";
 import { fetchWithAuth } from "~/lib/auth";
+import { truncateAddress } from "~/lib/truncateAddress";
+import { catMarketplaceAbi } from "~/lib/abi/cat-marketplace";
+import { useContractRead, useContractWrite, useWaitForTransactionReceipt } from "wagmi";
+import { formatUnits } from "viem";
 
 type GameState = 
   | "welcome" 
@@ -57,6 +61,162 @@ export default function OnbaseMeow() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   const fetchActivityFeed = useCallback(async (sessionId: string) => {
+  const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS;
+
+  const {
+    data: marketplaceItem,
+    refetch: refetchMarketplaceItem,
+    isLoading: isLoadingMarketplaceItem,
+  } = useContractRead({
+    address: marketplaceAddress as `0x${string}` | undefined,
+    abi: catMarketplaceAbi,
+    functionName: "getItem",
+    chainId: baseSepolia.id,
+    query: {
+      enabled: !!marketplaceAddress,
+      refetchOnWindowFocus: false,
+      staleTime: 15_000,
+    },
+  });
+
+  const {
+    writeContractAsync: writePurchase,
+    data: purchaseHash,
+    isPending: isPurchasePending,
+    error: purchaseError,
+  } = useContractWrite();
+
+  const {
+    isLoading: isPurchaseConfirming,
+    isSuccess: isPurchaseSuccess,
+  } = useWaitForTransactionReceipt({
+    chainId: baseSepolia.id,
+    hash: purchaseHash,
+  });
+
+  useEffect(() => {
+    if (isPurchaseSuccess) {
+      refetchMarketplaceItem();
+    }
+  }, [isPurchaseSuccess, refetchMarketplaceItem]);
+
+  const handlePurchaseItem = useCallback(async () => {
+    if (!marketplaceAddress || !marketplaceItem) {
+      console.error("Marketplace contract not configured or item unavailable");
+      return;
+    }
+
+    const [id, name, metadataURI, price, seller, available] = marketplaceItem as unknown as [
+      bigint,
+      string,
+      string,
+      bigint,
+      string,
+      boolean
+    ];
+
+    if (!available) {
+      console.warn("Item already sold");
+      return;
+    }
+
+    try {
+      const tx = await writePurchase({
+        address: marketplaceAddress as `0x${string}`,
+        abi: catMarketplaceAbi,
+        functionName: "purchase",
+        value: price,
+        chainId: baseSepolia.id,
+      });
+      console.log("Purchase submitted", tx);
+    } catch (error) {
+      console.error("Failed to purchase item", error);
+    }
+  }, [marketplaceAddress, marketplaceItem, writePurchase]);
+
+  const formatPrice = (value: bigint) => `${formatUnits(value, 18)} ETH`;
+
+  const renderMarketplace = () => {
+    if (!marketplaceAddress) {
+      return (
+        <div className="text-sm text-muted-foreground">
+          Marketplace contract not configured. Ask the parent app owner to set
+          <code className="ml-1 font-mono">NEXT_PUBLIC_MARKETPLACE_ADDRESS</code>.
+        </div>
+      );
+    }
+
+    if (isLoadingMarketplaceItem) {
+      return <div className="text-sm">Loading marketplace item...</div>;
+    }
+
+    if (!marketplaceItem) {
+      return <div className="text-sm text-muted-foreground">Unable to load marketplace item.</div>;
+    }
+
+    const [id, name, metadataURI, price, seller, available] = marketplaceItem as unknown as [
+      bigint,
+      string,
+      string,
+      bigint,
+      string,
+      boolean
+    ];
+
+    const isOwner = seller && address && seller.toLowerCase() === address.toLowerCase();
+    const isDisabled = !available || isPurchasePending || isPurchaseConfirming || !!purchaseHash || isOwner;
+
+    return (
+      <div className="bg-card border-4 border-primary rounded-3xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg text-primary">{name}</h3>
+          <span className="text-xs text-muted-foreground">Seller {truncateAddress(seller)}</span>
+        </div>
+
+        <div className="w-full h-48 bg-secondary border-2 border-primary rounded-lg flex items-center justify-center">
+          <Image
+            src="/CatPackPaid/CatItems/CatToys/CatToy.gif"
+            alt={name}
+            width={160}
+            height={160}
+            className="object-contain"
+          />
+        </div>
+
+        <div className="text-sm text-muted-foreground">
+          Metadata URI: {metadataURI || "n/a"}
+        </div>
+
+        <div className="text-xl text-primary">{formatPrice(price)}</div>
+
+        <Button
+          onClick={handlePurchaseItem}
+          disabled={isDisabled}
+          className="w-full bg-primary text-primary-foreground border-2 border-primary"
+        >
+          {isOwner
+            ? "You own this"
+            : available
+              ? isPurchasePending || isPurchaseConfirming
+                ? "Processing..."
+                : "Purchase"
+              : "Sold"}
+        </Button>
+
+        {purchaseError && (
+          <div className="text-xs text-destructive">
+            {purchaseError.message}
+          </div>
+        )}
+
+        {purchaseHash && (
+          <div className="text-xs text-muted-foreground">
+            Tx: {truncateAddress(purchaseHash)}
+          </div>
+        )}
+      </div>
+    );
+  };
     if (!context?.user?.fid) return;
 
     try {
@@ -577,14 +737,7 @@ export default function OnbaseMeow() {
           <div></div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <MarketplaceItem name="food" icon="🍽️" price={10} />
-          <MarketplaceItem name="bed" icon="🛏️" price={25} />
-          <MarketplaceItem name="bowl" icon="🥣" price={15} />
-          <MarketplaceItem name="cat toy" icon="🧸" price={20} />
-          <MarketplaceItem name="treats" icon="🦴" price={12} />
-          <MarketplaceItem name="ribbon" icon="🎀" price={30} />
-        </div>
+        {renderMarketplace()}
       </div>
     );
   }
