@@ -4,7 +4,10 @@ import { verifyAuth } from '~/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const { fid } = await verifyAuth(request)
+    const fid = await verifyAuth(request)
+    if (!fid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     
     const body = await request.json()
     const { address, chainId, connector } = body
@@ -32,7 +35,7 @@ export async function POST(request: NextRequest) {
       await CatService.createOrUpdateUser({
         fid,
         username: user.username,
-        pfpUrl: user.pfpUrl,
+        pfpUrl: user.pfpUrl || undefined,
         address,
       })
     }
@@ -49,7 +52,11 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { fid } = await verifyAuth(request)
+    const fid = await verifyAuth(request)
+    if (!fid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
     const { searchParams } = new URL(request.url)
     const address = searchParams.get('address')
 

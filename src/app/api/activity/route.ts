@@ -4,7 +4,10 @@ import { verifyAuth } from '~/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const { fid } = await verifyAuth(request)
+    const fid = await verifyAuth(request)
+    if (!fid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     
     const body = await request.json()
     const { sessionId, action } = body
@@ -46,7 +49,11 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { fid } = await verifyAuth(request)
+    const fid = await verifyAuth(request)
+    if (!fid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
     const { searchParams } = new URL(request.url)
     const sessionId = searchParams.get('sessionId')
     const limit = parseInt(searchParams.get('limit') || '10')

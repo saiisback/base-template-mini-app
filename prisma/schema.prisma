@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -20,8 +20,10 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  catSessions CatSession[]
-  activities  Activity[]
+  catSessions         CatSession[]        @relation("CatSessionOwner")
+  partnerSessions     CatSession[]        @relation("CatSessionPartner")
+  activities          Activity[]
+  walletConnections   WalletConnection[]
 
   @@map("users")
 }
@@ -37,10 +39,11 @@ model CatSession {
 
   // Relations
   ownerId     String
-  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner       User     @relation("CatSessionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   partnerId   String?
   partner     User?    @relation("CatSessionPartner", fields: [partnerId], references: [id])
   activities  Activity[]
+  catStats    CatStats?
 
   @@map("cat_sessions")
 }

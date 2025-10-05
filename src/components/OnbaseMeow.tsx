@@ -54,7 +54,7 @@ export default function OnbaseMeow() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
 
-  const addActivityLog = useCallback((action: 'feed' | 'cuddle' | 'love', user: 'you' | 'partner') => {
+  const addActivityLog = useCallback(async (action: 'feed' | 'cuddle' | 'love', user: 'you' | 'partner') => {
     const newActivity: ActivityLog = {
       id: Date.now().toString(),
       action,
@@ -62,7 +62,23 @@ export default function OnbaseMeow() {
       timestamp: new Date()
     };
     setActivityLog(prev => [newActivity, ...prev.slice(0, 4)]); // Keep only last 5 activities
-  }, []);
+
+    // Log to database if we have a session
+    if (gameState === "cat-care" && context?.user?.fid) {
+      try {
+        await fetch('/api/activity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: 'current-session', // In real app, this would be the actual session ID
+            action
+          })
+        });
+      } catch (error) {
+        console.error('Failed to log activity to database:', error);
+      }
+    }
+  }, [gameState, context?.user?.fid]);
 
   // Simulate partner activities occasionally
   useEffect(() => {
@@ -105,10 +121,26 @@ export default function OnbaseMeow() {
   useEffect(() => {
     if (signature) {
       console.log("Message signed successfully, transitioning to invite screen");
+      
+      // Log wallet connection to database
+      if (address && context?.user?.fid) {
+        fetch('/api/wallet-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            address,
+            chainId: 84532, // Base Sepolia testnet
+            connector: 'MetaMask' // This should be dynamic based on actual connector used
+          })
+        }).catch(error => {
+          console.error('Failed to log wallet connection:', error);
+        });
+      }
+      
       setGameState("invite");
       setIsConnecting(false);
     }
-  }, [signature]);
+  }, [signature, address, context?.user?.fid]);
 
   // Handle connection errors
   useEffect(() => {
@@ -165,13 +197,31 @@ export default function OnbaseMeow() {
     }
   }, [isConnected, connect, connectors, signMessage]);
 
-  const handleInvitePartner = useCallback(() => {
+  const handleInvitePartner = useCallback(async () => {
     // Simulate partner joining
     setPartner({
       fid: 12345,
       username: "partner",
       pfpUrl: "/placeholder-user.jpg"
     });
+    
+    // Create cat session in database
+    if (context?.user?.fid) {
+      try {
+        const response = await fetch('/api/cat-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            partnerFid: 12345,
+            name: 'cattyyy'
+          })
+        });
+        const data = await response.json();
+        console.log('Cat session created:', data);
+      } catch (error) {
+        console.error('Failed to create cat session:', error);
+      }
+    }
     
     // Add some initial partner activities
     const initialActivities: ActivityLog[] = [
@@ -191,7 +241,7 @@ export default function OnbaseMeow() {
     setActivityLog(initialActivities);
     
     setGameState("cat-care");
-  }, []);
+  }, [context?.user?.fid]);
 
   const handleFeed = useCallback(() => {
     setShowFeedAnimation(true);
@@ -360,7 +410,7 @@ export default function OnbaseMeow() {
         {/* Cat Display */}
         <div className="relative mb-6 bg-yellow-950 border-2 border-primary rounded-lg p-4 min-h-[300px] flex items-center justify-center">
           <img 
-            src={`/CatPackPaid/Sprites/${selectedCat}`}
+            src={`/idle.gif`}
             alt="Your Cat" 
             className="w-48 h-48 object-contain"
           />
