@@ -1,57 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --card: #ffffff;
-  --card-foreground: #171717;
-  --popover: #ffffff;
-  --popover-foreground: #171717;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #f3f4f6;
-  --secondary-foreground: #1f2937;
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  --accent: #f3f4f6;
-  --accent-foreground: #1f2937;
+  --background: #FDF5E6; /* cream */
+  --foreground: #2D1B2E; /* dark purple for text */
+  --card: #FDF5E6;
+  --card-foreground: #2D1B2E;
+  --popover: #FDF5E6;
+  --popover-foreground: #2D1B2E;
+  --primary: #DC143C; /* crimson red */
+  --primary-foreground: #FDF5E6;
+  --secondary: #F5E6D3; /* light cream */
+  --secondary-foreground: #2D1B2E;
+  --muted: #F5E6D3;
+  --muted-foreground: #8B7D8B;
+  --accent: #FF1493; /* deep pink/magenta */
+  --accent-foreground: #FDF5E6;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #2563eb;
+  --border: #DC143C;
+  --input: #F5E6D3;
+  --ring: #DC143C;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --card: #171717;
-    --card-foreground: #ededed;
-    --popover: #171717;
-    --popover-foreground: #ededed;
-    --primary: #3b82f6;
-    --primary-foreground: #ffffff;
-    --secondary: #1f2937;
-    --secondary-foreground: #f3f4f6;
-    --muted: #1f2937;
-    --muted-foreground: #9ca3af;
-    --accent: #1f2937;
-    --accent-foreground: #f3f4f6;
+    --background: #FDF5E6; /* Keep cream even in dark mode */
+    --foreground: #2D1B2E;
+    --card: #FDF5E6;
+    --card-foreground: #2D1B2E;
+    --popover: #FDF5E6;
+    --popover-foreground: #2D1B2E;
+    --primary: #DC143C;
+    --primary-foreground: #FDF5E6;
+    --secondary: #F5E6D3;
+    --secondary-foreground: #2D1B2E;
+    --muted: #F5E6D3;
+    --muted-foreground: #8B7D8B;
+    --accent: #FF1493;
+    --accent-foreground: #FDF5E6;
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
-    --border: #374151;
-    --input: #374151;
-    --ring: #3b82f6;
+    --border: #DC143C;
+    --input: #F5E6D3;
+    --ring: #DC143C;
   }
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: "Inter", Helvetica, Arial, sans-serif;
+  font-family: "Press Start 2P", monospace;
 }
 
 * {

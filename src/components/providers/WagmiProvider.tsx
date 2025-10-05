@@ -1,5 +1,5 @@
 import { createConfig, http, WagmiProvider } from "wagmi";
-import { base, degen, mainnet, optimism, unichain, celo } from "wagmi/chains";
+import { base, baseSepolia, degen, mainnet, optimism, unichain, celo } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
 import { coinbaseWallet, metaMask } from 'wagmi/connectors';
@@ -34,7 +34,10 @@ function useCoinbaseWalletAutoConnect() {
   useEffect(() => {
     // Auto-connect if in Coinbase Wallet and not already connected
     if (isCoinbaseWallet && !isConnected) {
-      connect({ connector: connectors[1] }); // Coinbase Wallet connector
+      connect({ 
+        connector: connectors[1], // Coinbase Wallet connector
+        chainId: baseSepolia.id // Connect to Base Sepolia testnet
+      });
     }
   }, [isCoinbaseWallet, isConnected, connect, connectors]);
 
@@ -42,8 +45,9 @@ function useCoinbaseWalletAutoConnect() {
 }
 
 export const config = createConfig({
-  chains: [base, optimism, mainnet, degen, unichain, celo],
+  chains: [baseSepolia, base, optimism, mainnet, degen, unichain, celo],
   transports: {
+    [baseSepolia.id]: http(),
     [base.id]: http(),
     [optimism.id]: http(),
     [mainnet.id]: http(),

@@ -1,0 +1,83 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  fid       Int      @unique // Farcaster ID
+  username  String
+  pfpUrl    String?
+  address   String?  @unique // Wallet address
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  catSessions CatSession[]
+  activities  Activity[]
+
+  @@map("users")
+}
+
+model CatSession {
+  id        String   @id @default(cuid())
+  name      String   @default("cattyyy")
+  love      Int      @default(50)
+  hunger    Int      @default(30)
+  happiness Int      @default(75)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  partnerId   String?
+  partner     User?    @relation("CatSessionPartner", fields: [partnerId], references: [id])
+  activities  Activity[]
+
+  @@map("cat_sessions")
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  action    String   // 'feed', 'cuddle', 'love'
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   CatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@map("activities")
+}
+
+model WalletConnection {
+  id        String   @id @default(cuid())
+  address   String   @unique
+  chainId   Int
+  connector String   // 'MetaMask', 'Coinbase Wallet', 'Farcaster'
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("wallet_connections")
+}
+
+model CatStats {
+  id        String   @id @default(cuid())
+  sessionId String   @unique
+  session   CatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  love      Int      @default(50)
+  hunger    Int      @default(30)
+  happiness Int      @default(75)
+  updatedAt DateTime @updatedAt
+
+  @@map("cat_stats")
+}

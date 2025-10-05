@@ -1,8 +1,11 @@
-export const APP_URL = process.env.NEXT_PUBLIC_URL!;
-export const APP_NAME = process.env.NEXT_PUBLIC_FRAME_NAME;
-export const APP_DESCRIPTION = process.env.NEXT_PUBLIC_FRAME_DESCRIPTION;
-export const APP_PRIMARY_CATEGORY = process.env.NEXT_PUBLIC_FRAME_PRIMARY_CATEGORY;
-export const APP_TAGS = process.env.NEXT_PUBLIC_FRAME_TAGS?.split(',');
+export const APP_URL = process.env.NEXT_PUBLIC_URL ?? "";
+export const APP_NAME = process.env.NEXT_PUBLIC_FRAME_NAME ?? "onbase Meow";
+export const APP_DESCRIPTION =
+  process.env.NEXT_PUBLIC_FRAME_DESCRIPTION ??
+  "Raise a Base-native kitten together with your favorite co-parent.";
+export const APP_PRIMARY_CATEGORY =
+  process.env.NEXT_PUBLIC_FRAME_PRIMARY_CATEGORY ?? "gaming";
+export const APP_TAGS = process.env.NEXT_PUBLIC_FRAME_TAGS?.split(",");
 export const APP_ICON_URL = `${APP_URL}/icon.png`;
 export const APP_OG_IMAGE_URL = `${APP_URL}/api/opengraph-image`;
 export const APP_SPLASH_URL = `${APP_URL}/splash.png`;
