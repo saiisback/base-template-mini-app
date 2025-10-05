@@ -1,17 +1,23 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useMiniApp } from "@neynar/react";
-import { useAccount, useConnect, useSignMessage } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { useAccount, useChainId, useConnect, useSignMessage } from "wagmi";
+import { base, baseSepolia } from "wagmi/chains";
 import Image from "next/image";
 import { ShareButton } from "./ui/Share";
 import { Button } from "./ui/Button";
 import { fetchWithAuth } from "~/lib/auth";
 import { truncateAddress } from "~/lib/truncateAddress";
 import { catMarketplaceAbi } from "~/lib/abi/cat-marketplace";
-import { useContractRead, useContractWrite, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useContractRead,
+  useContractWrite,
+  useWaitForTransactionReceipt,
+  usePublicClient,
+} from "wagmi";
 import { formatUnits } from "viem";
+import { http } from "viem";
 
 type GameState = 
   | "welcome" 
@@ -45,6 +51,7 @@ export default function OnbaseMeow() {
   const { address, isConnected } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { signMessage, isPending: isSignPending, data: signature, error: signError } = useSignMessage();
+  const activeChainId = useChainId();
   
   const [gameState, setGameState] = useState<GameState>("welcome");
   const [partner, setPartner] = useState<Partner | null>(null);
@@ -60,17 +67,31 @@ export default function OnbaseMeow() {
   const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS;
+  const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS as
+    | `0x${string}`
+    | undefined;
+  const marketplaceChainId = Number(
+    process.env.NEXT_PUBLIC_MARKETPLACE_CHAIN_ID ?? baseSepolia.id
+  );
+  const marketplaceRpcUrl = process.env.NEXT_PUBLIC_MARKETPLACE_RPC_URL;
+  const publicClient = usePublicClient({
+    chainId: marketplaceChainId,
+  });
+
+  const connectableConnector = useMemo(() => {
+    return connectors.find((connector) => connector.id !== "farcaster") ?? connectors[0];
+  }, [connectors]);
 
   const {
     data: marketplaceItem,
     refetch: refetchMarketplaceItem,
     isLoading: isLoadingMarketplaceItem,
+    error: marketplaceError,
   } = useContractRead({
-    address: marketplaceAddress as `0x${string}` | undefined,
+    address: marketplaceAddress,
     abi: catMarketplaceAbi,
     functionName: "getItem",
-    chainId: baseSepolia.id,
+    chainId: marketplaceChainId,
     query: {
       enabled: !!marketplaceAddress,
       refetchOnWindowFocus: false,
@@ -89,7 +110,7 @@ export default function OnbaseMeow() {
     isLoading: isPurchaseConfirming,
     isSuccess: isPurchaseSuccess,
   } = useWaitForTransactionReceipt({
-    chainId: baseSepolia.id,
+    chainId: marketplaceChainId,
     hash: purchaseHash,
   });
 
@@ -105,33 +126,33 @@ export default function OnbaseMeow() {
       return;
     }
 
-    const [id, name, metadataURI, price, seller, available] = marketplaceItem as unknown as [
-      bigint,
-      string,
-      string,
-      bigint,
-      string,
-      boolean
-    ];
+    const item = marketplaceItem as unknown as {
+      id: bigint;
+      name: string;
+      metadataURI: string;
+      price: bigint;
+      seller: string;
+      available: boolean;
+    };
 
-    if (!available) {
+    if (!item.available) {
       console.warn("Item already sold");
       return;
     }
 
     try {
       const tx = await writePurchase({
-        address: marketplaceAddress as `0x${string}`,
+        address: marketplaceAddress,
         abi: catMarketplaceAbi,
         functionName: "purchase",
-        value: price,
-        chainId: baseSepolia.id,
+        value: item.price,
+        chainId: marketplaceChainId,
       });
       console.log("Purchase submitted", tx);
     } catch (error) {
       console.error("Failed to purchase item", error);
     }
-  }, [marketplaceAddress, marketplaceItem, writePurchase]);
+  }, [marketplaceAddress, marketplaceItem, marketplaceChainId, writePurchase]);
 
   const formatPrice = (value: bigint) => `${formatUnits(value, 18)} ETH`;
 
@@ -165,34 +186,64 @@ export default function OnbaseMeow() {
   }, [context?.user?.fid]);
 
   const addActivityLog = useCallback(async (action: 'feed' | 'cuddle' | 'love', user: 'you' | 'partner') => {
-    // Log to database if we have a session
-    if (gameState === "cat-care" && context?.user?.fid && currentSessionId) {
-      console.log('Logging activity to database...', { action, fid: context.user.fid, sessionId: currentSessionId });
+    console.log('addActivityLog called:', { 
+      action, 
+      user, 
+      gameState, 
+      address,
+      sessionId: currentSessionId
+    });
+    
+    // Always add to local state first
+    const localEntry: ActivityLog = {
+      id: Date.now().toString(),
+      action,
+      user,
+      timestamp: new Date()
+    };
+    setActivityLog(prev => [localEntry, ...prev.slice(0, 4)]);
+
+    // Log to database - just need wallet address and action
+    if (address) {
+      console.log('Logging activity to database...', { action, address });
       try {
-        const response = await fetchWithAuth('/api/activity', {
+        const response = await fetch('/api/activity', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${context.user.fid}`,
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${address}`,
           },
           body: JSON.stringify({
-            sessionId: currentSessionId,
-            action
+            walletAddress: address,
+            action,
+            sessionId: currentSessionId || 'no-session'
           })
         });
+        
+        console.log('Activity API response status:', response.status);
+        const responseText = await response.text();
+        console.log('Activity API response body:', responseText);
+        
         if (!response.ok) {
-          console.error('Failed to log activity: HTTP', response.status);
+          console.error('Failed to log activity: HTTP', response.status, responseText);
           return;
         }
-        const data = await response.json();
+        
+        const data = JSON.parse(responseText);
         console.log('Activity logged successfully:', data);
-        if (data.activity) {
-          await fetchActivityFeed(currentSessionId);
+        
+        // Update session ID if returned
+        if (data.sessionId && data.sessionId !== currentSessionId) {
+          console.log('Updating session ID:', data.sessionId);
+          setCurrentSessionId(data.sessionId);
         }
       } catch (error) {
         console.error('Failed to log activity to database:', error);
       }
+    } else {
+      console.log('Skipping database log - no wallet address');
     }
-  }, [gameState, context?.user?.fid, currentSessionId, fetchActivityFeed]);
+  }, [gameState, currentSessionId, address]);
 
   // Simulate partner activities occasionally
   useEffect(() => {
@@ -229,7 +280,13 @@ export default function OnbaseMeow() {
     console.log("Connect error:", connectError);
     console.log("Sign error:", signError);
     console.log("Signature:", signature);
-  }, [isConnected, address, isConnecting, connectors, connectError, signError, signature, gameState]);
+    console.log("Farcaster context:", { 
+      isSDKLoaded, 
+      user: context?.user, 
+      fid: context?.user?.fid,
+      username: context?.user?.username 
+    });
+  }, [isConnected, address, isConnecting, connectors, connectError, signError, signature, gameState, isSDKLoaded, context]);
 
   // Handle successful signature
   useEffect(() => {
@@ -237,20 +294,35 @@ export default function OnbaseMeow() {
       console.log("Message signed successfully, transitioning to invite screen");
       
       // Log wallet connection to database
-      if (address && context?.user?.fid) {
-        console.log('Logging wallet connection to database...', { address, fid: context.user.fid });
-        fetchWithAuth('/api/wallet-connection', {
+      const userFid = context?.user?.fid || (address ? parseInt(address.slice(-8), 16) : null);
+      if (address && userFid) {
+        console.log('Logging wallet connection to database...', { 
+          address, 
+          fid: userFid,
+          contextFid: context?.user?.fid 
+        });
+        fetch('/api/wallet-connection', {
           method: 'POST',
           headers: { 
-            Authorization: `Bearer ${context.user.fid}`,
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userFid}`,
           },
           body: JSON.stringify({
             address,
-            chainId: 84532, // Base Sepolia testnet
-            connector: 'MetaMask' // This should be dynamic based on actual connector used
+            chainId: marketplaceChainId,
+            connector: connectableConnector?.name || 'Wallet'
           })
         })
-        .then(response => response.json())
+        .then(async (response) => {
+          console.log('Wallet connection response status:', response.status);
+          const responseText = await response.text();
+          console.log('Wallet connection response body:', responseText);
+          
+          if (!response.ok) {
+            throw new Error(`Wallet log failed ${response.status}: ${responseText}`);
+          }
+          return JSON.parse(responseText);
+        })
         .then(data => {
           console.log('Wallet connection logged successfully:', data);
         })
@@ -262,7 +334,7 @@ export default function OnbaseMeow() {
       setGameState("invite");
       setIsConnecting(false);
     }
-  }, [signature, address, context?.user?.fid]);
+  }, [signature, address, context?.user?.fid, marketplaceChainId, connectableConnector]);
 
   // Handle connection errors
   useEffect(() => {
@@ -305,21 +377,33 @@ export default function OnbaseMeow() {
   // All hooks must be called before any conditional logic
   const handlePlay = useCallback(() => {
     if (!isConnected) {
+      if (!connectableConnector) {
+        console.error("No non-Farcaster connectors available");
+        return;
+      }
+
       setIsConnecting(true);
-      // Try to connect with the first available connector to Base Sepolia testnet
-      connect({ 
-        connector: connectors[0],
-        chainId: baseSepolia.id
+      connect({
+        connector: connectableConnector,
+        chainId: marketplaceChainId,
       });
     } else {
-      // If already connected, just sign the message
-      signMessage({ 
-        message: "Welcome to onbase Meow! Let's raise a cat together 🐱"
+      signMessage({
+        message: "Welcome to onbase Meow! Let's raise a cat together 🐱",
       });
     }
-  }, [isConnected, connect, connectors, signMessage]);
+  }, [
+    isConnected,
+    connect,
+    connectableConnector,
+    marketplaceChainId,
+    signMessage,
+  ]);
 
   const handleInvitePartner = useCallback(async () => {
+    // Use FID if available, otherwise use a hash of the wallet address as fallback
+    const userFid = context?.user?.fid || (address ? parseInt(address.slice(-8), 16) : null);
+    
     // Simulate partner joining
     setPartner({
       fid: 12345,
@@ -328,24 +412,35 @@ export default function OnbaseMeow() {
     });
     
     // Create cat session in database
-    if (context?.user?.fid) {
-      console.log('Creating cat session in database...', { fid: context.user.fid });
+    if (userFid) {
+      console.log('Creating cat session in database...', { 
+        fid: userFid, 
+        contextFid: context?.user?.fid,
+        address 
+      });
       try {
-        const response = await fetchWithAuth('/api/cat-session', {
+        const response = await fetch('/api/cat-session', {
           method: 'POST',
           headers: { 
-            Authorization: `Bearer ${context.user.fid}`,
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userFid}`,
           },
           body: JSON.stringify({
             partnerFid: 12345,
             name: 'cattyyy'
           })
         });
+        
+        console.log('Cat session response status:', response.status);
+        const responseText = await response.text();
+        console.log('Cat session response body:', responseText);
+        
         if (!response.ok) {
-          console.error('Failed to create cat session: HTTP', response.status);
+          console.error('Failed to create cat session: HTTP', response.status, responseText);
           return;
         }
-        const data = await response.json();
+        
+        const data = JSON.parse(responseText);
         console.log('Cat session created:', data);
         if (data.session?.id) {
           setCurrentSessionId(data.session.id);
@@ -354,16 +449,19 @@ export default function OnbaseMeow() {
       } catch (error) {
         console.error('Failed to create cat session:', error);
       }
+    } else {
+      console.log('Skipping session creation - no user identifier available');
     }
     
     setGameState("cat-care");
-  }, [context?.user?.fid, fetchActivityFeed]);
+  }, [context?.user?.fid, address, fetchActivityFeed]);
 
   useEffect(() => {
-    if (currentSessionId && context?.user?.fid) {
+    const userFid = context?.user?.fid || (address ? parseInt(address.slice(-8), 16) : null);
+    if (currentSessionId && userFid) {
       fetchActivityFeed(currentSessionId);
     }
-  }, [currentSessionId, context?.user?.fid, fetchActivityFeed]);
+  }, [currentSessionId, context?.user?.fid, address, fetchActivityFeed]);
 
   const handleFeed = useCallback(() => {
     setShowFeedAnimation(true);
@@ -423,21 +521,134 @@ export default function OnbaseMeow() {
     </div>
   );
 
-  const MarketplaceItem = ({
-    name,
-    icon,
-    price,
-  }: {
-    name: string;
-    icon: string;
-    price: number;
-  }) => (
-    <div className="bg-card border-2 border-primary rounded-lg p-3 text-center cursor-pointer hover:bg-accent transition-colors">
-      <div className="text-2xl mb-2">{icon}</div>
-      <div className="text-xs mb-1">{name}</div>
-      <div className="text-xs text-primary">{price} coins</div>
-    </div>
-  );
+  const renderMarketplace = () => {
+    if (!marketplaceAddress) {
+      return (
+        <div className="text-sm text-muted-foreground">
+          Marketplace contract not configured. Ask the parent app owner to set
+          <code className="ml-1 font-mono">NEXT_PUBLIC_MARKETPLACE_ADDRESS</code>.
+        </div>
+      );
+    }
+
+    if (isLoadingMarketplaceItem) {
+      return <div className="text-sm">Loading marketplace item...</div>;
+    }
+
+    if (!marketplaceItem) {
+      return (
+        <div className="text-sm text-muted-foreground space-y-2">
+          <div>Unable to load marketplace item.</div>
+          <div className="text-xs">
+            <div>Contract: {marketplaceAddress}</div>
+            <div>Chain ID: {marketplaceChainId}</div>
+            <div>Your Chain: {activeChainId || 'Not connected'}</div>
+          </div>
+          {marketplaceError && (
+            <div className="mt-2 text-xs text-destructive">
+              {marketplaceError.message}
+            </div>
+          )}
+          <div className="text-xs text-yellow-600">
+            💡 Make sure you deployed the contract to chain ID {marketplaceChainId} and your wallet is connected to the same chain.
+          </div>
+        </div>
+      );
+    }
+
+    const item = marketplaceItem as unknown as {
+      id: bigint;
+      name: string;
+      metadataURI: string;
+      price: bigint;
+      seller: string;
+      available: boolean;
+    };
+
+    const wrongChain =
+      isConnected && activeChainId !== undefined && activeChainId !== marketplaceChainId;
+
+    const isOwner = Boolean(
+      item.seller && address && item.seller.toLowerCase() === address.toLowerCase()
+    );
+    const isDisabled =
+      wrongChain || !item.available || isPurchasePending || isPurchaseConfirming || !!purchaseHash || isOwner;
+
+    return (
+      <div className="bg-card border-4 border-primary rounded-3xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg text-primary">{item.name}</h3>
+          <span className="text-xs text-muted-foreground">
+            Seller {truncateAddress(item.seller)}
+          </span>
+        </div>
+
+        {wrongChain && (
+          <div className="text-xs text-destructive">
+            Switch your wallet to chain ID {marketplaceChainId} to purchase.
+          </div>
+        )}
+
+        <div className="w-full h-48 bg-secondary border-2 border-primary rounded-lg flex items-center justify-center">
+          <Image
+            src="/CatPackPaid/CatItems/CatToys/CatToy.gif"
+            alt={item.name}
+            width={160}
+            height={160}
+            className="object-contain"
+          />
+        </div>
+
+        <div className="text-sm text-muted-foreground">
+          Metadata URI: {item.metadataURI || "n/a"}
+        </div>
+
+        <div className="text-xl text-primary">{formatPrice(item.price)}</div>
+
+        <Button
+          onClick={handlePurchaseItem}
+          disabled={isDisabled}
+          className="w-full bg-primary text-primary-foreground border-2 border-primary"
+        >
+          {isOwner
+            ? 'You own this'
+            : item.available
+              ? isPurchasePending || isPurchaseConfirming
+                ? 'Processing...'
+                : 'Purchase'
+              : 'Sold'}
+        </Button>
+
+        {purchaseError && (
+          <div className="text-xs text-destructive">{purchaseError.message}</div>
+        )}
+
+        {purchaseHash && (
+          <div className="text-xs text-muted-foreground">Tx: {truncateAddress(purchaseHash)}</div>
+        )}
+
+        {activityLog.length > 0 && (
+          <div className="pt-4 border-t border-primary/40 space-y-2">
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">
+              recent actions
+            </div>
+            {activityLog.slice(0, 5).map((entry) => (
+              <div key={entry.id} className="flex justify-between text-xs text-muted-foreground">
+                <span>{entry.user === 'you' ? 'you' : 'partner'} {entry.action}ed</span>
+                <span className="opacity-70">
+                  {entry.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (gameState === "marketplace" && !!marketplaceAddress && !marketplaceItem && marketplaceError) {
+    console.error("Marketplace load error", marketplaceError);
+  }
 
   // Welcome Screen
   if (gameState === "welcome") {

@@ -32,25 +32,70 @@ export interface LogEntryData {
   level: 'info' | 'warn' | 'error'
   message: string
   meta?: unknown
+  context?: unknown
 }
 
 export class CatService {
   // User management
   static async createOrUpdateUser(data: CreateUserData) {
-    return await db.user.upsert({
-      where: { fid: data.fid },
-      update: {
-        username: data.username,
-        pfpUrl: data.pfpUrl,
-        address: data.address,
-      },
-      create: {
-        fid: data.fid,
-        username: data.username,
-        pfpUrl: data.pfpUrl,
-        address: data.address,
-      },
+    // First try to find by address if provided
+    if (data.address) {
+      const existingUser = await db.user.findUnique({
+        where: { address: data.address }
+      })
+      if (existingUser) {
+        // Update existing user
+        return await db.user.update({
+          where: { id: existingUser.id },
+          data: {
+            username: data.username,
+            pfpUrl: data.pfpUrl,
+          }
+        })
+      }
+    }
+
+    // Try to find by FID
+    const existingUserByFid = await db.user.findUnique({
+      where: { fid: data.fid }
     })
+    if (existingUserByFid) {
+      // Update existing user
+      return await db.user.update({
+        where: { id: existingUserByFid.id },
+        data: {
+          username: data.username,
+          pfpUrl: data.pfpUrl,
+          address: data.address,
+        }
+      })
+    }
+
+    // Create new user - generate a unique FID if there's a conflict
+    let finalFid = data.fid
+    let attempts = 0
+    while (attempts < 10) {
+      try {
+        return await db.user.create({
+          data: {
+            fid: finalFid,
+            username: data.username,
+            pfpUrl: data.pfpUrl,
+            address: data.address,
+          }
+        })
+      } catch (error: any) {
+        if (error.code === 'P2002' && error.meta?.target?.includes('fid')) {
+          // FID conflict, try with a different one
+          finalFid = finalFid + Math.floor(Math.random() * 1000)
+          attempts++
+        } else {
+          throw error
+        }
+      }
+    }
+    
+    throw new Error('Unable to create user after multiple attempts')
   }
 
   static async getUserByFid(fid: number) {
@@ -60,6 +105,12 @@ export class CatService {
   }
 
   static async getUserByAddress(address: string) {
+    return await db.user.findUnique({
+      where: { address },
+    })
+  }
+
+  static async getUserByWalletAddress(address: string) {
     return await db.user.findUnique({
       where: { address },
     })
@@ -260,10 +311,9 @@ export class CatService {
   static async createLogEntry(data: LogEntryData) {
     return await db.logEntry.create({
       data: {
-        fid: data.fid,
         level: data.level,
         message: data.message,
-        meta: data.meta as any,
+        context: (data.context || data.meta) as any,
       },
     })
   }

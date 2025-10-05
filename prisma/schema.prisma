@@ -87,11 +87,10 @@ model CatStats {
 
 model LogEntry {
   id        String   @id @default(cuid())
-  fid       Int?
+  timestamp DateTime @default(now())
   level     String
   message   String
-  meta      Json?
-  createdAt DateTime @default(now())
+  context   Json?
 
   @@map("log_entries")
 }

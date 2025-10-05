@@ -4,28 +4,30 @@ import { verifyAuth } from '~/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const fid = await verifyAuth(request)
-    if (!fid) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Get user identifier from Authorization header
+    const authHeader = request.headers.get('authorization')
+    const userFid = authHeader?.replace('Bearer ', '')
+    
+    if (!userFid) {
+      return NextResponse.json({ error: 'Missing authorization' }, { status: 401 })
     }
     
     const body = await request.json()
     const { partnerFid, name } = body
 
     await CatService.createLogEntry({
-      fid,
       level: 'info',
       message: 'Create cat session request received',
-      meta: { partnerFid, name },
+      context: { userFid, partnerFid, name },
     })
 
-    // Get or create user
-    let user = await CatService.getUserByFid(fid)
+    // Get or create user - try by FID first, then create if needed
+    let user = await CatService.getUserByFid(parseInt(userFid))
     if (!user) {
       // Create user if they don't exist
       user = await CatService.createOrUpdateUser({
-        fid,
-        username: `user_${fid}`,
+        fid: parseInt(userFid),
+        username: `user_${userFid}`,
         pfpUrl: undefined,
       })
     }
@@ -52,21 +54,33 @@ export async function POST(request: NextRequest) {
     })
 
     await CatService.createLogEntry({
-      fid,
       level: 'info',
       message: 'Cat session created',
-      meta: { sessionId: session?.id },
+      context: { userFid, sessionId: session?.id },
     })
 
     return NextResponse.json({ session })
   } catch (error) {
     console.error('Error creating cat session:', error)
-    await CatService.createLogEntry({
-      level: 'error',
-      message: 'Error creating cat session',
-      meta: { error: String(error) },
-    })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    
+    try {
+      await CatService.createLogEntry({
+        level: 'error',
+        message: 'Error creating cat session',
+        context: { 
+          error: String(error),
+          stack: error instanceof Error ? error.stack : 'No stack trace'
+        },
+      })
+    } catch (logError) {
+      console.error('Failed to log error:', logError)
+    }
+    
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? String(error) : undefined
+    }, { status: 500 })
   }
 }
 
