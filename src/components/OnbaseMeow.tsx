@@ -86,7 +86,7 @@ export default function OnbaseMeow() {
         console.error('Failed to log activity to database:', error);
       }
     }
-  }, [gameState, context?.user?.fid]);
+  }, [gameState, context?.user?.fid, currentSessionId]);
 
   // Simulate partner activities occasionally
   useEffect(() => {
@@ -444,9 +444,11 @@ export default function OnbaseMeow() {
           />
           
           {showLoveAnimation && (
-            <img 
+            <Image 
               src="/love.gif" 
               alt="Love animation"
+              width={48}
+              height={48}
               className="absolute top-4 right-4 w-12 h-12"
             />
           )}
